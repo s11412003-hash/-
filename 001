@@ -1,0 +1,449 @@
+>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>狼人殺互動模擬器</title>
+
+<style>
+body{
+    font-family: "Microsoft JhengHei";
+    background:#1e1e2f;
+    color:white;
+    margin:0;
+    padding:20px;
+}
+
+h1{
+    text-align:center;
+    color:#ffcc00;
+}
+
+.container{
+    display:flex;
+    gap:20px;
+}
+
+.left-panel{
+    width:40%;
+}
+
+.right-panel{
+    width:60%;
+}
+
+.card{
+    background:#2b2b40;
+    padding:15px;
+    border-radius:10px;
+    margin-bottom:15px;
+}
+
+.player{
+    border:1px solid #555;
+    padding:10px;
+    margin:5px 0;
+    border-radius:8px;
+    display:flex;
+    justify-content:space-between;
+}
+
+.dead{
+    opacity:0.4;
+}
+
+button{
+    background:#ff9800;
+    color:white;
+    border:none;
+    padding:10px 15px;
+    border-radius:8px;
+    cursor:pointer;
+    margin:5px;
+}
+
+button:hover{
+    background:#ffb74d;
+}
+
+.log{
+    height:500px;
+    overflow-y:auto;
+    background:#111;
+    padding:10px;
+    border-radius:10px;
+}
+
+input, select{
+    padding:8px;
+    border-radius:6px;
+    border:none;
+    margin:5px;
+}
+
+.phase{
+    color:#00e5ff;
+    font-weight:bold;
+}
+
+.good{
+    color:#4caf50;
+}
+
+.wolf{
+    color:#f44336;
+}
+</style>
+</head>
+
+<body>
+
+<h1>🐺 狼人殺互動模擬器</h1>
+
+<div class="container">
+
+    <!-- 左側 -->
+    <div class="left-panel">
+
+        <div class="card">
+            <h2>🎮 遊戲控制</h2>
+
+            <button onclick="startGame()">開始遊戲</button>
+            <button onclick="showGodView()">上帝視角</button>
+            <button onclick="nextNight()">進入夜晚</button>
+            <button onclick="nextDay()">進入白天</button>
+        </div>
+
+        <div class="card">
+            <h2>👥 玩家列表</h2>
+            <div id="playerList"></div>
+        </div>
+
+    </div>
+
+    <!-- 右側 -->
+    <div class="right-panel">
+
+        <div class="card">
+            <h2>📜 遊戲紀錄</h2>
+            <div class="log" id="log"></div>
+        </div>
+
+        <div class="card">
+            <h2>⚙️ 操作區</h2>
+
+            <div>
+                玩家：
+                <select id="playerSelect"></select>
+            </div>
+
+            <div>
+                目標：
+                <select id="targetSelect"></select>
+            </div>
+
+            <button onclick="playerReveal()">查看身份</button>
+            <button onclick="wolfKill()">狼人擊殺</button>
+            <button onclick="seerCheck()">預言家查驗</button>
+            <button onclick="witchHeal()">女巫救人</button>
+            <button onclick="witchPoison()">女巫毒人</button>
+            <button onclick="votePlayer()">投票</button>
+
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+
+class Player{
+    constructor(name, role, side, id){
+        this.name = name;
+        this.role = role;
+        this.side = side;
+        this.id = id;
+        this.alive = true;
+    }
+}
+
+let players = [];
+let day = 1;
+
+let witchHealUsed = false;
+let witchPoisonUsed = false;
+
+let wolfTarget = null;
+
+const roles = [
+    "狼人","狼人","狼人",
+    "平民","平民","平民",
+    "預言家","女巫","調停者","叛徒"
+];
+
+function shuffle(arr){
+    return arr.sort(()=>Math.random()-0.5);
+}
+
+function roleSide(role){
+    return role === "狼人" ? "狼人" : "好人";
+}
+
+function addLog(msg){
+    const log = document.getElementById("log");
+    log.innerHTML += `<div>${msg}</div>`;
+    log.scrollTop = log.scrollHeight;
+}
+
+function renderPlayers(){
+
+    const list = document.getElementById("playerList");
+    list.innerHTML = "";
+
+    players.forEach(p=>{
+
+        list.innerHTML += `
+        <div class="player ${!p.alive ? 'dead':''}">
+            <span>${p.name}</span>
+            <span>${p.alive ? '🟢' : '💀'}</span>
+        </div>
+        `;
+    });
+
+    renderSelects();
+}
+
+function renderSelects(){
+
+    const playerSelect = document.getElementById("playerSelect");
+    const targetSelect = document.getElementById("targetSelect");
+
+    playerSelect.innerHTML = "";
+    targetSelect.innerHTML = "";
+
+    players.forEach(p=>{
+
+        if(p.alive){
+
+            playerSelect.innerHTML += `
+            <option value="${p.id}">
+                ${p.name}
+            </option>
+            `;
+
+            targetSelect.innerHTML += `
+            <option value="${p.id}">
+                ${p.name}
+            </option>
+            `;
+        }
+    });
+}
+
+function startGame(){
+
+    players = [];
+
+    const shuffled = shuffle([...roles]);
+
+    for(let i=0;i<10;i++){
+
+        players.push(
+            new Player(
+                `${i+1}號玩家`,
+                shuffled[i],
+                roleSide(shuffled[i]),
+                i+1
+            )
+        );
+    }
+
+    day = 1;
+
+    addLog("🎭 遊戲開始！");
+    renderPlayers();
+}
+
+function playerReveal(){
+
+    const id = parseInt(
+        document.getElementById("playerSelect").value
+    );
+
+    const p = players.find(x=>x.id===id);
+
+    alert(`
+玩家：${p.name}
+
+角色：${p.role}
+陣營：${p.side}
+    `);
+}
+
+function showGodView(){
+
+    let text = "【上帝視角】\n\n";
+
+    players.forEach(p=>{
+
+        text += `
+${p.name}
+角色:${p.role}
+陣營:${p.side}
+狀態:${p.alive ? '存活':'死亡'}
+
+`;
+    });
+
+    alert(text);
+}
+
+function nextNight(){
+
+    addLog(`<hr><div class="phase">🌙 第 ${day} 晚</div>`);
+
+    wolfTarget = null;
+}
+
+function nextDay(){
+
+    addLog(`<hr><div class="phase">☀️ 第 ${day} 天</div>`);
+
+    if(wolfTarget){
+
+        wolfTarget.alive = false;
+
+        addLog(`💀 ${wolfTarget.name} 被狼人殺死`);
+    }else{
+        addLog(`🕊️ 平安夜`);
+    }
+
+    renderPlayers();
+
+    checkVictory();
+
+    day++;
+}
+
+function wolfKill(){
+
+    const targetId = parseInt(
+        document.getElementById("targetSelect").value
+    );
+
+    wolfTarget = players.find(p=>p.id===targetId);
+
+    addLog(`🐺 狼人選擇擊殺 ${wolfTarget.name}`);
+}
+
+function seerCheck(){
+
+    const targetId = parseInt(
+        document.getElementById("targetSelect").value
+    );
+
+    const target = players.find(p=>p.id===targetId);
+
+    alert(`
+🔮 查驗結果
+
+${target.name}
+陣營：${target.side}
+    `);
+
+    addLog(`🔮 預言家查驗 ${target.name}`);
+}
+
+function witchHeal(){
+
+    if(witchHealUsed){
+        alert("解藥已使用");
+        return;
+    }
+
+    if(wolfTarget){
+
+        addLog(`🧪 女巫救了 ${wolfTarget.name}`);
+
+        wolfTarget = null;
+
+        witchHealUsed = true;
+    }
+}
+
+function witchPoison(){
+
+    if(witchPoisonUsed){
+        alert("毒藥已使用");
+        return;
+    }
+
+    const targetId = parseInt(
+        document.getElementById("targetSelect").value
+    );
+
+    const target = players.find(p=>p.id===targetId);
+
+    target.alive = false;
+
+    witchPoisonUsed = true;
+
+    addLog(`☠️ 女巫毒殺 ${target.name}`);
+
+    renderPlayers();
+
+    checkVictory();
+}
+
+function votePlayer(){
+
+    const targetId = parseInt(
+        document.getElementById("targetSelect").value
+    );
+
+    const target = players.find(p=>p.id===targetId);
+
+    target.alive = false;
+
+    addLog(`🗳️ ${target.name} 被公投出局`);
+
+    renderPlayers();
+
+    checkVictory();
+}
+
+function checkVictory(){
+
+    const alive = players.filter(p=>p.alive);
+
+    const wolves = alive.filter(p=>p.side==="狼人");
+
+    const good = alive.filter(p=>p.side==="好人");
+
+    if(wolves.length===0){
+
+        addLog(`
+        <h2 class="good">
+        🎉 好人勝利！
+        </h2>
+        `);
+
+        alert("好人勝利！");
+    }
+
+    if(wolves.length >= good.length){
+
+        addLog(`
+        <h2 class="wolf">
+        🐺 狼人勝利！
+        </h2>
+        `);
+
+        alert("狼人勝利！");
+    }
+}
+
+</script>
+
+</body>
+</html>                                                                                                                                                                                          
